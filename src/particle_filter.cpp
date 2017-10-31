@@ -60,7 +60,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 	normal_distribution<double> dist_theta(0, std_pos[2]);
 
 
-  bool yaw_dot_is_zero = fabs(yaw_rate) < 0e-10;
+  bool yaw_dot_is_zero = fabs(yaw_rate) < 1e-10;
 	double c1;
 	if (!yaw_dot_is_zero) {
 		c1 = velocity / yaw_rate;
