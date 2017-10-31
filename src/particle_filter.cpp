@@ -21,12 +21,7 @@
 using namespace std;
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
-	// TODO: Set the number of particles. Initialize all particles to first position (based on estimates of
-	//   x, y, theta and their uncertainties from GPS) and all weights to 1.
-	// Add random Gaussian noise to each particle.
-	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
-
-	num_particles = 1;
+	num_particles = 30;
 	weights = std::vector<double>(num_particles);
 	particles = std::vector<Particle>(num_particles);
 
@@ -52,7 +47,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 		 p.weight = weights[i];
 
 		 particles[i] = p;
-		 cout << "particle init: " << particles[i].x << "," << particles[i].y  << "," << particles[i].theta << "," << particles[i].weight << "," << particles[i].theta << endl;
+		 //cout << "particle init: " << particles[i].x << "," << particles[i].y  << "," << particles[i].theta << "," << particles[i].weight << "," << particles[i].theta << endl;
 
 	}
 
@@ -60,16 +55,16 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate) {
-	// TODO: Add measurements to each particle and add random Gaussian noise.
-	// NOTE: When adding noise you may find std::normal_distribution and std::default_random_engine useful.
-	//  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
-	//  http://www.cplusplus.com/reference/random/default_random_engine/
-
 	normal_distribution<double> dist_x(0, std_pos[0]);
 	normal_distribution<double> dist_y(0, std_pos[1]);
 	normal_distribution<double> dist_theta(0, std_pos[2]);
 
-	double c1 = velocity / yaw_rate;
+
+  bool yaw_dot_is_zero = fabs(yaw_rate) < 0e-10;
+	double c1;
+	if (!yaw_dot_is_zero) {
+		c1 = velocity / yaw_rate;
+	}
 
 	for (int i=0; i< num_particles; i++) {
 		double x_0 = particles[i].x;
@@ -79,10 +74,18 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
 		//cout << "prediction: old location " << x_0 << "," << y_0  << "," << theta_0 << "," << particles[i].weight << endl;
 
+		if (yaw_dot_is_zero) {
+			cout << "yaw_dot_is_zero";
+			particles[i].x = x_0 + velocity * delta_t * cos(theta_0) + dist_x(gen);
+			particles[i].y = y_0 + velocity * delta_t * sin(theta_0) + dist_y(gen);
+			particles[i].theta = theta_0 + dist_theta(gen);
+		} else {
+			particles[i].x = x_0 + c1 * (sin(theta_0 + yaw_delta_t) - sin(theta_0)) + dist_x(gen);
+			particles[i].y = y_0 + c1 * (cos(theta_0) - cos(theta_0 + yaw_delta_t)) + dist_y(gen);
+			particles[i].theta = theta_0 + yaw_delta_t + dist_theta(gen);
+		}
 
-		particles[i].x = x_0 + c1 * (sin(theta_0 + yaw_delta_t) - sin(theta_0)) + dist_x(gen);
-		particles[i].y = y_0 + c1 * (cos(theta_0) - cos(theta_0 + yaw_delta_t)) + dist_y(gen);
-		particles[i].theta = theta_0 + yaw_delta_t + dist_theta(gen);
+
 
 		// particles[i].x = x_0 + c1 * (sin(theta_0 + yaw_delta_t) - sin(theta_0));// + dist_x(gen);
 		// particles[i].y = y_0 + c1 * (cos(theta_0) - cos(theta_0 + yaw_delta_t));// + dist_y(gen);
@@ -155,26 +158,26 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	for (int p=0; p<particles.size(); p++) {
 
 		const Particle particle = particles[p];
-		//cout << "particle coordinates x,y " << particle.x << "," << particle.y << endl;
-		//cout << "updateWeights-particle: " << particle.x << "," << particle.y  << "," << particle.theta << "," << particle.weight << endl;
+		// cout << "updateWeights-particle: " << particle.x << "," << particle.y  << "," << particle.theta << "," << particle.weight << endl;
 
 		const double cos_theta = cos(particle.theta);
 		const double sin_theta = sin(particle.theta);
 
 		// convert each observation into map coordinates
-		cout << "---------------------Obs Transformations------------------------" << endl;
+		// //cout << "---------------------Obs Transformations------------------------" << endl;
 		std::vector<LandmarkObs> observations_map_coordinate_system;
 		for (int o=0; o<observations.size(); o++) {
 			LandmarkObs observation = observations[o];
+			LandmarkObs mapObservation;
 
-			cout << "obs(" << observation.x << "," << observation.y << ")-->mapObs(";
+			//cout << "obs(" << observation.x << "," << observation.y << ")-->mapObs(";
 
-			observation.x = particle.x + cos_theta * observation.x - sin_theta * observation.y;
-			observation.y = particle.y + sin_theta * observation.x + cos_theta * observation.y;
+			mapObservation.x = particle.x + cos_theta * observation.x - sin_theta * observation.y;
+			mapObservation.y = particle.y + sin_theta * observation.x + cos_theta * observation.y;
 
-			cout << observation.x << "," << observation.y << ")" << endl;
+			//cout << mapObservation.x << "," << mapObservation	.y << ")" << endl;
 
-			observations_map_coordinate_system.push_back(observation);
+			observations_map_coordinate_system.push_back(mapObservation);
 		}
 
 		//cout << "landarmks" << endl;
@@ -200,16 +203,16 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
 		dataAssociation(predicted, observations_map_coordinate_system);
 
-		cout << "---------------------Assosciations------------------------" << endl;
+		//cout << "---------------------Assosciations------------------------" << endl;
 		for (int o=0; o<observations_map_coordinate_system.size(); o++) {
 			const LandmarkObs obs = observations_map_coordinate_system[o];
 			const LandmarkObs prediction = predicted_dict[obs.id];
 
-			cout << "mapObs(" << obs.x << "," << obs.y << "); Predicted(" << prediction.x << "," << prediction.y << ") distance: " << distance(obs, prediction) << endl;
+			//cout << "mapObs(" << obs.x << "," << obs.y << "); Predicted(" << prediction.x << "," << prediction.y << ") distance: " << distance(obs, prediction) << endl;
 		}
 
 
-		cout << "---------------------Weights Calc------------------------" << endl;
+		//cout << "---------------------Weights Calc------------------------" << endl;
 
 		std::vector<int> associations(observations_map_coordinate_system.size());
 		std::vector<double> sense_x(observations_map_coordinate_system.size());
@@ -227,7 +230,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 			//cout << "obs x,y " << x_obs << "," << y_obs << " with id " << prediction.id << endl;
 			//cout << "mu  x,y " << mu_x << "," << mu_y << endl << endl;
 
-			cout << "mapObs(" << obs.x << "," << obs.y << "); Predicted(" << prediction.x << "," << prediction.y << ") distance: " << distance(obs, prediction) << endl;
+			//cout << "mapObs(" << obs.x << "," << obs.y << "); Predicted(" << prediction.x << "," << prediction.y << ") distance: " << distance(obs, prediction) << endl;
 
 			associations[o] = observations_map_coordinate_system[o].id;
 			sense_x[o] = x_obs;
@@ -235,17 +238,17 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
 			// calculate exponent
 			const double exponent = (pow(x_obs - mu_x, 2))/sig_xx_2 + (pow(y_obs - mu_y, 2))/sig_yy_2;
-			cout << "exp: " << exponent << endl;
+			//cout << "exp: " << exponent << endl;
 
 			// calculate weight using normalization terms and exponent
 			const double weight_partial = gauss_norm * exp(-exponent);
-			cout << "weight partial " << weight_partial << endl;
+			//cout << "weight partial " << weight_partial << endl;
 			new_weights.push_back(weight_partial);
 		}
 
-		for (auto i = new_weights.begin(); i != new_weights.end(); ++i)
-	    std::cout << *i << ' ';
-		cout << endl;
+		// for (auto i = new_weights.begin(); i != new_weights.end(); ++i)
+	  //   std::cout << *i << ' ';
+		// cout << endl;
 
 		double weight = std::accumulate(new_weights.begin(), new_weights.end(), 1.0, std::multiplies<double>());
 
@@ -255,7 +258,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 		// cout << endl;
 		particles[p].weight = weight;
 		weights[p] = weight;
-		cout << "weight: " << weight << endl << endl;
+		//cout << "weight: " << weight << endl << endl;
 	}
 }
 
